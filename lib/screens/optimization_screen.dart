@@ -429,6 +429,15 @@ class _ParamsCard extends StatelessWidget {
               onChanged: (v) =>
                   context.read<OptimizationProvider>().numElite = v.toInt(),
             ),
+            _SliderRow(
+              label: 'Paciencia',
+              value: opt.paciencia.toDouble(),
+              min: 5, max: 100, divisions: 19,
+              display: '${opt.paciencia}',
+              disabled: running,
+              onChanged: (v) =>
+                  context.read<OptimizationProvider>().paciencia = v.toInt(),
+            ),
           ],
         ),
       ),
@@ -446,6 +455,7 @@ class _ParamsCard extends StatelessWidget {
       opt.probCruz        = 0.90;
       opt.probMut         = 0.15;
       opt.numElite        = 5;
+      opt.paciencia       = 50;
     } else if (n == 1) {
       // 1 semestre: rápido y preciso
       opt.tamPoblacion    = 60;
@@ -453,6 +463,7 @@ class _ParamsCard extends StatelessWidget {
       opt.probCruz        = 0.85;
       opt.probMut         = 0.10;
       opt.numElite        = 3;
+      opt.paciencia       = 20;
     } else if (n <= 4) {
       // 2–4 semestres: balanceado
       opt.tamPoblacion    = 100;
@@ -460,6 +471,7 @@ class _ParamsCard extends StatelessWidget {
       opt.probCruz        = 0.85;
       opt.probMut         = 0.12;
       opt.numElite        = 4;
+      opt.paciencia       = 30;
     } else {
       // 5+ semestres: casi pensum completo
       opt.tamPoblacion    = 200;
@@ -467,6 +479,7 @@ class _ParamsCard extends StatelessWidget {
       opt.probCruz        = 0.90;
       opt.probMut         = 0.15;
       opt.numElite        = 5;
+      opt.paciencia       = 50;
     }
   }
 }
@@ -503,7 +516,7 @@ class _PresetBar extends StatelessWidget {
             _PresetChip(
               icon: '⚡',
               label: '1 Semestre',
-              sublabel: 'Pob:60  Gen:150',
+              sublabel: 'Pob:60  Gen:150  Pac:20',
               color: Colors.green,
               disabled: running,
               onTap: () {
@@ -512,13 +525,14 @@ class _PresetBar extends StatelessWidget {
                   ..numGeneraciones = 150
                   ..probCruz        = 0.85
                   ..probMut         = 0.10
-                  ..numElite        = 3;
+                  ..numElite        = 3
+                  ..paciencia       = 20;
               },
             ),
             _PresetChip(
               icon: '⚖️',
               label: '2–4 Semestres',
-              sublabel: 'Pob:100  Gen:250',
+              sublabel: 'Pob:100  Gen:250  Pac:30',
               color: Colors.blue,
               disabled: running,
               onTap: () {
@@ -527,13 +541,14 @@ class _PresetBar extends StatelessWidget {
                   ..numGeneraciones = 250
                   ..probCruz        = 0.85
                   ..probMut         = 0.12
-                  ..numElite        = 4;
+                  ..numElite        = 4
+                  ..paciencia       = 30;
               },
             ),
             _PresetChip(
               icon: '🔬',
               label: 'Pensum Completo',
-              sublabel: 'Pob:200  Gen:500',
+              sublabel: 'Pob:200  Gen:500  Pac:50',
               color: Colors.purple,
               disabled: running,
               onTap: () {
@@ -542,7 +557,8 @@ class _PresetBar extends StatelessWidget {
                   ..numGeneraciones = 500
                   ..probCruz        = 0.90
                   ..probMut         = 0.15
-                  ..numElite        = 5;
+                  ..numElite        = 5
+                  ..paciencia       = 50;
               },
             ),
           ],
@@ -707,18 +723,55 @@ class _ProgressCard extends StatelessWidget {
           ),
           if (opt.status == OptStatus.done) ...[
             const SizedBox(height: 8),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 18),
-                SizedBox(width: 6),
-                Text('¡Optimización completada!',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
+            _StopReasonBanner(razon: opt.razonParada),
           ],
         ]),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner de razón de parada
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StopReasonBanner extends StatelessWidget {
+  final String razon;
+  const _StopReasonBanner({required this.razon});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, texto) = switch (razon) {
+      'optimo_encontrado' => (
+          Icons.check_circle,
+          Colors.green,
+          '¡Solución óptima encontrada! El horario no tiene conflictos.',
+        ),
+      'estancamiento' => (
+          Icons.pause_circle_outline,
+          Colors.orange,
+          'Parada por estancamiento: el fitness no mejoró en las últimas generaciones configuradas.',
+        ),
+      _ => (
+          Icons.check_circle_outline,
+          Colors.blue,
+          '¡Optimización completada! Se ejecutaron todas las generaciones.',
+        ),
+    };
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
     );
   }
 }

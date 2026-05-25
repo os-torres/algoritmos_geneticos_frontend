@@ -21,6 +21,7 @@ class OptimizationProvider extends ChangeNotifier {
   double _probMut         = 0.10;
   int    _numElite        = 2;
   int    _tamTorneo       = 5;
+  int    _paciencia       = 30;
   // Lista de semestres seleccionados; vacía = todos los semestres
   List<int> _semestresFiltro = [];
 
@@ -30,6 +31,7 @@ class OptimizationProvider extends ChangeNotifier {
   double    get probMut         => _probMut;
   int       get numElite        => _numElite;
   int       get tamTorneo       => _tamTorneo;
+  int       get paciencia       => _paciencia;
   List<int> get semestresFiltro => List.unmodifiable(_semestresFiltro);
 
   set tamPoblacion(int v)         { _tamPoblacion    = v; notifyListeners(); }
@@ -38,6 +40,7 @@ class OptimizationProvider extends ChangeNotifier {
   set probMut(double v)           { _probMut         = v; notifyListeners(); }
   set numElite(int v)             { _numElite        = v; notifyListeners(); }
   set tamTorneo(int v)            { _tamTorneo       = v; notifyListeners(); }
+  set paciencia(int v)            { _paciencia       = v; notifyListeners(); }
 
   /// Reemplaza la selección de semestres completa.
   set semestresFiltro(List<int> v) {
@@ -72,6 +75,8 @@ class OptimizationProvider extends ChangeNotifier {
   double mejorFitness  = 0;
   int conflictos       = 0;
   int generacionActual = 0;
+  /// Razón por la que terminó el AG (vacío mientras corre)
+  String razonParada   = "";
 
   void iniciar() {
     historial.clear();
@@ -81,6 +86,7 @@ class OptimizationProvider extends ChangeNotifier {
     mejorFitness  = 0;
     conflictos    = 0;
     generacionActual = 0;
+    razonParada   = "";
     errorMsg = null;
     status   = OptStatus.running;
     notifyListeners();
@@ -93,6 +99,7 @@ class OptimizationProvider extends ChangeNotifier {
         'prob_mutacion':    probMut,
         'num_elite':        numElite,
         'tam_torneo':       tamTorneo,
+        'paciencia':        paciencia,
         if (_semestresFiltro.isNotEmpty)
           'semestres_filtro': _semestresFiltro,
       },
@@ -114,6 +121,7 @@ class OptimizationProvider extends ChangeNotifier {
         conflictos        = final_.conflictos;
         topIndividuos     = final_.topIndividuos;
         conflictosDetalle = final_.conflictosDetalle;
+        razonParada       = final_.razonParada;
         status            = OptStatus.done;
         notifyListeners();
       },
@@ -142,6 +150,7 @@ class OptimizationProvider extends ChangeNotifier {
     mejorFitness  = 0;
     conflictos    = 0;
     generacionActual = 0;
+    razonParada   = "";
     errorMsg = null;
     status   = OptStatus.idle;
     notifyListeners();

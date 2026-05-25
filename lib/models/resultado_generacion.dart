@@ -137,6 +137,8 @@ class ResultadoGeneracion {
   final List<Asignacion> mejorHorario;
   final List<IndividuoTop> topIndividuos;
   final List<ConflictoDetalle> conflictosDetalle;
+  /// "" = en curso  |  "optimo_encontrado"  |  "estancamiento"  |  "generaciones_completadas"
+  final String razonParada;
 
   const ResultadoGeneracion({
     required this.numero,
@@ -147,6 +149,7 @@ class ResultadoGeneracion {
     required this.mejorHorario,
     required this.topIndividuos,
     this.conflictosDetalle = const [],
+    this.razonParada = "",
   });
 
   factory ResultadoGeneracion.fromJson(Map<String, dynamic> j) =>
@@ -165,5 +168,6 @@ class ResultadoGeneracion {
         conflictosDetalle: (j['conflictos_detalle'] as List? ?? [])
             .map((e) => ConflictoDetalle.fromJson(e as Map<String, dynamic>))
             .toList(),
+        razonParada: j['razon_parada'] as String? ?? "",
       );
 }
