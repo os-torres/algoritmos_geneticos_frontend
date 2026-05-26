@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuración de red para BUILDS DE DEBUG.
+  Sobreescribe el archivo de src/main/res/xml/ en debug builds.
+  Permite HTTP cleartext para:
+    - Emulador Android   → 10.0.2.2
+    - Redes LAN locales  → 192.168.x.x / 10.x.x.x / 172.16-31.x.x
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

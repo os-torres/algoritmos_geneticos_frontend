@@ -152,6 +152,7 @@ class ResultadoGeneracion {
     this.razonParada = "",
   });
 
+  /// Para mensajes del WebSocket (campo "datos" de cada generación).
   factory ResultadoGeneracion.fromJson(Map<String, dynamic> j) =>
       ResultadoGeneracion(
         numero:          j['numero'] as int,
@@ -169,5 +170,18 @@ class ResultadoGeneracion {
             .map((e) => ConflictoDetalle.fromJson(e as Map<String, dynamic>))
             .toList(),
         razonParada: j['razon_parada'] as String? ?? "",
+      );
+
+  /// Para ítems del array "historial" en la respuesta de POST /api/optimizar.
+  /// Solo tiene datos agregados por generación (sin horario ni top-individuos).
+  factory ResultadoGeneracion.fromHistorialItem(Map<String, dynamic> j) =>
+      ResultadoGeneracion(
+        numero:          j['generacion'] as int,
+        mejorFitness:    (j['mejor_fitness'] as num).toDouble(),
+        promedioFitness: (j['promedio_fitness'] as num).toDouble(),
+        peorFitness:     (j['peor_fitness'] as num).toDouble(),
+        conflictos:      j['conflictos'] as int,
+        mejorHorario:    const [],
+        topIndividuos:   const [],
       );
 }

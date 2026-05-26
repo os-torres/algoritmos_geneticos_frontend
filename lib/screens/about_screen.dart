@@ -1,112 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 
-const _kPrefHost = 'server_host';
-const _kPrefPort = 'server_port';
-
-class AboutScreen extends StatefulWidget {
+class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
-
-  @override
-  State<AboutScreen> createState() => _AboutScreenState();
-}
-
-class _AboutScreenState extends State<AboutScreen> {
-  // ── Configuración del servidor ─────────────────────────────────────────────
-
-  Future<void> _showServerConfig() async {
-    final hostCtrl = TextEditingController(text: AppConfig.serverHost);
-    final portCtrl = TextEditingController(text: '${AppConfig.serverPort}');
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.dns_outlined),
-            SizedBox(width: 8),
-            Text('Servidor API'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '📱 Emulador Android → 10.0.2.2\n'
-                '📲 Dispositivo físico → IP LAN del PC\n'
-                '    Ejemplo: 192.168.1.X',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: hostCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Host / IP',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.computer_outlined),
-              ),
-              keyboardType: TextInputType.url,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: portCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Puerto',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.settings_ethernet),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    final host = hostCtrl.text.trim();
-    final port = int.tryParse(portCtrl.text.trim()) ?? AppConfig.serverPort;
-    if (host.isEmpty) return;
-
-    setState(() {
-      AppConfig.serverHost = host;
-      AppConfig.serverPort = port;
-    });
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kPrefHost, host);
-    await prefs.setInt(_kPrefPort, port);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Servidor actualizado → http://$host:$port'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -197,22 +93,20 @@ class _AboutScreenState extends State<AboutScreen> {
                   _InfoTile(icon: Icons.sports_kabaddi, text: 'Selección: Torneo determinístico'),
                 ]),
 
-                // ── Configuración del servidor ─────────────────────────────
-                _Section(title: 'Configuración de desarrollo', children: [
+                // ── Servidor ──────────────────────────────────────────────
+                _Section(title: 'Servidor API', children: [
                   ListTile(
                     leading: Icon(Icons.dns_outlined, color: cs.primary, size: 22),
-                    title: const Text('Servidor API'),
+                    title: const Text('Endpoint'),
                     subtitle: Text(
-                      'http://${AppConfig.serverHost}:${AppConfig.serverPort}',
+                      AppConfig.baseUrl,
                       style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 12,
                         color: cs.secondary,
                       ),
                     ),
-                    trailing: Icon(Icons.edit_outlined, color: cs.outline, size: 18),
                     dense: true,
-                    onTap: _showServerConfig,
                   ),
                 ]),
 

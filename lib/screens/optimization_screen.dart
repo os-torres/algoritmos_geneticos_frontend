@@ -690,37 +690,62 @@ class _ProgressCard extends StatelessWidget {
   final OptimizationProvider opt;
   const _ProgressCard({required this.opt});
 
+  String _formatElapsed(int secs) {
+    if (secs < 60) return '${secs}s';
+    return '${secs ~/ 60}m ${secs % 60}s';
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final progress = opt.numGeneraciones > 0
-        ? (opt.generacionActual / opt.numGeneraciones).clamp(0.0, 1.0)
-        : 0.0;
+    final isRunning = opt.status == OptStatus.running;
 
     return Card(
       color: cs.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            _StatPill(label: 'Generación',
-                value: '${opt.generacionActual}/${opt.numGeneraciones}'),
-            _StatPill(label: 'Mejor fitness',
-                value: opt.mejorFitness.toStringAsFixed(0)),
-            _StatPill(
-              label: 'Conflictos',
-              value: '${opt.conflictos}',
-              valueColor: opt.conflictos == 0 ? Colors.green : cs.error,
-            ),
-          ]),
+          // ── Stats ─────────────────────────────────────────────────────────
+          if (isRunning)
+            // Mientras espera la respuesta: muestra tiempo transcurrido
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Optimizando…  ${_formatElapsed(opt.elapsedSec)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: cs.onPrimaryContainer,
+                ),
+              ),
+            ])
+          else
+            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+              _StatPill(label: 'Generaciones',
+                  value: '${opt.generacionActual}'),
+              _StatPill(label: 'Mejor fitness',
+                  value: opt.mejorFitness.toStringAsFixed(0)),
+              _StatPill(
+                label: 'Conflictos',
+                value: '${opt.conflictos}',
+                valueColor: opt.conflictos == 0 ? Colors.green : cs.error,
+              ),
+            ]),
+
           const SizedBox(height: 12),
+
+          // ── Barra de progreso ──────────────────────────────────────────────
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: opt.status == OptStatus.done ? 1.0 : progress,
-              minHeight: 8,
-            ),
+            child: isRunning
+                // Indeterminada mientras espera la respuesta REST
+                ? const LinearProgressIndicator(minHeight: 8)
+                : LinearProgressIndicator(value: 1.0, minHeight: 8),
           ),
+
           if (opt.status == OptStatus.done) ...[
             const SizedBox(height: 8),
             _StopReasonBanner(razon: opt.razonParada),

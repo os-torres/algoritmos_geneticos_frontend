@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 
 class AppConfig {
-  // ── Servidor local (desarrollo) ───────────────────────────────────────────
-  // Android emulator → 10.0.2.2 apunta al localhost del equipo de desarrollo.
-  // Dispositivo físico → cambiar por la IP LAN del equipo (ej. 192.168.1.X).
-  // La URL se puede reconfigurar en tiempo de ejecución desde el diálogo
-  // de ajustes (icono servidor en la barra inferior).
-  static String serverHost = '10.0.2.2';
-  static int    serverPort = 8000;
-
-  static String get baseUrl => 'http://$serverHost:$serverPort';
-  static String get wsUrl   => 'ws://$serverHost:$serverPort';
+  /// URL base del servidor API (sin trailing slash).
+  ///
+  /// Producción  → https://giecom.com.co/HorarioGenetico
+  /// Emulador    → http://10.0.2.2:8000
+  /// Dispositivo → http://192.168.1.X:8000
+  static const String baseUrl = 'https://giecom.com.co/HorarioGenetico';
 }
 
 // ── Paleta por grupo (A, B, C…) ──────────────────────────────────────────────

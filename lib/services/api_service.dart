@@ -124,11 +124,8 @@ class ApiService {
       _post('/api/importar', body);
 
   // -----------------------------------------------------------------------
-  // Optimización (síncrona)
+  // Optimización
   // -----------------------------------------------------------------------
-
-  Future<Map<String, dynamic>> optimizar(Map<String, dynamic> params) =>
-      _post('/api/optimizar', params);
 
   // -----------------------------------------------------------------------
   // HTTP helpers
@@ -148,15 +145,22 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
-  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
-    final res = await http.post(
-      Uri.parse('$_base$path'),
-      headers: _headers,
-      body: jsonEncode(body),
-    );
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body,
+      {Duration timeout = const Duration(seconds: 30)}) async {
+    final res = await http
+        .post(
+          Uri.parse('$_base$path'),
+          headers: _headers,
+          body: jsonEncode(body),
+        )
+        .timeout(timeout);
     _check(res);
     return jsonDecode(res.body);
   }
+
+  /// Ejecuta el algoritmo genético. Timeout de 10 min (puede tardar según parámetros).
+  Future<Map<String, dynamic>> optimizar(Map<String, dynamic> params) =>
+      _post('/api/optimizar', params, timeout: const Duration(minutes: 10));
 
   Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> body) async {
     final res = await http.put(
@@ -175,8 +179,20 @@ class ApiService {
 
   void _check(http.Response res) {
     if (res.statusCode >= 400) {
-      final body = jsonDecode(res.body);
-      throw ApiException(body['detail']?.toString() ?? 'Error ${res.statusCode}');
+      // El servidor puede devolver HTML (página de error de IIS) o JSON.
+      // Intentamos parsear JSON; si falla, usamos el texto plano o el código HTTP.
+      String detail;
+      try {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        detail = body['detail']?.toString() ?? 'Error ${res.statusCode}';
+      } catch (_) {
+        // Respuesta no-JSON (HTML de IIS, texto plano, etc.)
+        final text = res.body.trim();
+        detail = text.isNotEmpty && text.length < 300
+            ? 'Error ${res.statusCode}: $text'
+            : 'Error ${res.statusCode}';
+      }
+      throw ApiException(detail);
     }
   }
 }

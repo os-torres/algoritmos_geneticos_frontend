@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'config.dart';
 import 'providers/data_provider.dart';
 import 'providers/optimization_provider.dart';
 import 'screens/home_screen.dart';
@@ -11,17 +9,8 @@ import 'screens/optimization_screen.dart';
 import 'screens/schedule_screen.dart';
 import 'screens/about_screen.dart';
 
-// Claves de SharedPreferences — también usadas en about_screen.dart
-const String kPrefHost = 'server_host';
-const String kPrefPort = 'server_port';
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Cargar host/puerto guardados (si el desarrollador los cambió antes)
-  final prefs = await SharedPreferences.getInstance();
-  AppConfig.serverHost = prefs.getString(kPrefHost) ?? AppConfig.serverHost;
-  AppConfig.serverPort = prefs.getInt(kPrefPort)    ?? AppConfig.serverPort;
 
   runApp(
     MultiProvider(

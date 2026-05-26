@@ -1,20 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/resultado_generacion.dart';
 import '../models/asignacion.dart';
-import '../services/websocket_service.dart';
+import '../services/api_service.dart';
 // ignore: unused_import — ConflictoDetalle se usa en conflictosDetalle
 export '../models/resultado_generacion.dart' show ConflictoDetalle;
 
 enum OptStatus { idle, running, done, error }
 
 class OptimizationProvider extends ChangeNotifier {
-  final _ws = WebSocketService();
-
   OptStatus status = OptStatus.idle;
   String? errorMsg;
 
-  // Parámetros del AG — setters que notifican al listener para reflejar
-  // el cambio visualmente en tiempo real mientras se mueve el slider.
+  // ── Parámetros del AG ─────────────────────────────────────────────────────
   int    _tamPoblacion    = 100;
   int    _numGeneraciones = 200;
   double _probCruz        = 0.85;
@@ -22,7 +20,6 @@ class OptimizationProvider extends ChangeNotifier {
   int    _numElite        = 2;
   int    _tamTorneo       = 5;
   int    _paciencia       = 30;
-  // Lista de semestres seleccionados; vacía = todos los semestres
   List<int> _semestresFiltro = [];
 
   int       get tamPoblacion    => _tamPoblacion;
@@ -42,13 +39,6 @@ class OptimizationProvider extends ChangeNotifier {
   set tamTorneo(int v)            { _tamTorneo       = v; notifyListeners(); }
   set paciencia(int v)            { _paciencia       = v; notifyListeners(); }
 
-  /// Reemplaza la selección de semestres completa.
-  set semestresFiltro(List<int> v) {
-    _semestresFiltro = List.of(v);
-    notifyListeners();
-  }
-
-  /// Activa o desactiva un semestre individual (toggle).
   void toggleSemestre(int s) {
     if (_semestresFiltro.contains(s)) {
       _semestresFiltro.remove(s);
@@ -59,82 +49,112 @@ class OptimizationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Limpia el filtro (= todos los semestres).
   void limpiarSemestres() {
     _semestresFiltro.clear();
     notifyListeners();
   }
 
-  // Historial de generaciones (para la gráfica)
-  final List<ResultadoGeneracion> historial = [];
+  set semestresFiltro(List<int> v) {
+    _semestresFiltro = List.of(v);
+    notifyListeners();
+  }
 
-  // Horario final y población
-  List<Asignacion>        horarioFinal        = [];
-  List<IndividuoTop>      topIndividuos       = [];   // Top-3 de la generación actual
-  List<ConflictoDetalle>  conflictosDetalle   = [];   // Detalle de conflictos del mejor
-  double mejorFitness  = 0;
-  int conflictos       = 0;
-  int generacionActual = 0;
-  /// Razón por la que terminó el AG (vacío mientras corre)
-  String razonParada   = "";
+  // ── Estado de la optimización ─────────────────────────────────────────────
+  final List<ResultadoGeneracion> historial = [];
+  List<Asignacion>       horarioFinal      = [];
+  List<IndividuoTop>     topIndividuos     = [];
+  List<ConflictoDetalle> conflictosDetalle = [];
+  double  mejorFitness     = 0;
+  int     conflictos       = 0;
+  int     generacionActual = 0;
+  String  razonParada      = "";
+
+  // Tiempo transcurrido (para mostrar en la UI mientras espera)
+  int    _elapsedSec = 0;
+  Timer? _timer;
+  int    _runId      = 0;   // token para ignorar respuestas de runs anteriores
+
+  int get elapsedSec => _elapsedSec;
+
+  // ── Ciclo de vida ─────────────────────────────────────────────────────────
 
   void iniciar() {
-    historial.clear();
-    horarioFinal.clear();
-    topIndividuos.clear();
-    conflictosDetalle.clear();
-    mejorFitness  = 0;
-    conflictos    = 0;
-    generacionActual = 0;
-    razonParada   = "";
-    errorMsg = null;
-    status   = OptStatus.running;
+    _resetState();
+    status = OptStatus.running;
     notifyListeners();
 
-    _ws.connect(
-      params: {
-        'tam_poblacion':    tamPoblacion,
-        'num_generaciones': numGeneraciones,
-        'prob_cruzamiento': probCruz,
-        'prob_mutacion':    probMut,
-        'num_elite':        numElite,
-        'tam_torneo':       tamTorneo,
-        'paciencia':        paciencia,
+    // Contador de segundos transcurridos (feedback visual)
+    _elapsedSec = 0;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _elapsedSec++;
+      notifyListeners();
+    });
+
+    _runREST(++_runId);
+  }
+
+  Future<void> _runREST(int myRunId) async {
+    try {
+      final result = await ApiService().optimizar({
+        'tam_poblacion':    _tamPoblacion,
+        'num_generaciones': _numGeneraciones,
+        'prob_cruzamiento': _probCruz,
+        'prob_mutacion':    _probMut,
+        'num_elite':        _numElite,
+        'tam_torneo':       _tamTorneo,
+        'paciencia':        _paciencia,
         if (_semestresFiltro.isNotEmpty)
           'semestres_filtro': _semestresFiltro,
-      },
-      onGeneration: (gen) {
-        historial.add(gen);
-        generacionActual = gen.numero;
-        mejorFitness     = gen.mejorFitness;
-        conflictos       = gen.conflictos;
-        horarioFinal     = gen.mejorHorario;
-        topIndividuos    = gen.topIndividuos;
-        if (gen.conflictosDetalle.isNotEmpty) {
-          conflictosDetalle = gen.conflictosDetalle;
-        }
-        notifyListeners();
-      },
-      onDone: (final_) {
-        horarioFinal      = final_.mejorHorario;
-        mejorFitness      = final_.mejorFitness;
-        conflictos        = final_.conflictos;
-        topIndividuos     = final_.topIndividuos;
-        conflictosDetalle = final_.conflictosDetalle;
-        razonParada       = final_.razonParada;
-        status            = OptStatus.done;
-        notifyListeners();
-      },
-      onError: (msg) {
-        errorMsg = msg;
-        status   = OptStatus.error;
-        notifyListeners();
-      },
-    );
+      });
+
+      if (myRunId != _runId) return; // fue cancelado
+
+      // ── Historial de generaciones (para la gráfica) ──
+      final rawHistorial = result['historial'] as List? ?? [];
+      historial.addAll(rawHistorial.map(
+        (e) => ResultadoGeneracion.fromHistorialItem(e as Map<String, dynamic>),
+      ));
+
+      // ── Resultado final ──────────────────────────────
+      generacionActual = result['generaciones_ejecutadas'] as int? ?? 0;
+      mejorFitness     = (result['mejor_fitness'] as num? ?? 0).toDouble();
+      conflictos       = result['conflictos_finales'] as int? ?? 0;
+      razonParada      = result['razon_parada'] as String? ?? '';
+
+      final rawHorario = result['mejor_horario'] as List? ?? [];
+      horarioFinal = rawHorario
+          .map((e) => Asignacion.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      final rawConflictos = result['conflictos_detalle'] as List? ?? [];
+      conflictosDetalle = rawConflictos
+          .map((e) => ConflictoDetalle.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      status = OptStatus.done;
+    } on TimeoutException {
+      if (myRunId != _runId) return;
+      errorMsg = 'La optimización tardó demasiado. '
+          'Reduce las generaciones o el tamaño de población e intenta de nuevo.';
+      status = OptStatus.error;
+    } catch (e) {
+      if (myRunId != _runId) return;
+      errorMsg = e.toString();
+      status = OptStatus.error;
+    } finally {
+      if (myRunId == _runId) {
+        _timer?.cancel();
+        _timer = null;
+      }
+    }
+
+    if (myRunId == _runId) notifyListeners();
   }
 
   void detener() {
-    _ws.disconnect();
+    _runId++;           // invalida el run actual
+    _timer?.cancel();
+    _timer = null;
     if (status == OptStatus.running) {
       status = OptStatus.idle;
       notifyListeners();
@@ -142,23 +162,31 @@ class OptimizationProvider extends ChangeNotifier {
   }
 
   void reiniciar() {
-    detener();
+    _runId++;
+    _timer?.cancel();
+    _timer = null;
+    _resetState();
+    status   = OptStatus.idle;
+    errorMsg = null;
+    notifyListeners();
+  }
+
+  void _resetState() {
     historial.clear();
     horarioFinal.clear();
     topIndividuos.clear();
     conflictosDetalle.clear();
-    mejorFitness  = 0;
-    conflictos    = 0;
+    mejorFitness     = 0;
+    conflictos       = 0;
     generacionActual = 0;
-    razonParada   = "";
-    errorMsg = null;
-    status   = OptStatus.idle;
-    notifyListeners();
+    razonParada      = '';
+    errorMsg         = null;
+    _elapsedSec      = 0;
   }
 
   @override
   void dispose() {
-    _ws.disconnect();
+    _timer?.cancel();
     super.dispose();
   }
 }
