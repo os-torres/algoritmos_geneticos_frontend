@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 class AppConfig {
   /// URL base del servidor API (sin trailing slash).
   ///
-  /// Producción  → https://giecom.com.co/HorarioGenetico
+  /// Local       → http://127.0.0.1:8000
   /// Emulador    → http://10.0.2.2:8000
   /// Dispositivo → http://192.168.1.X:8000
-  static const String baseUrl = 'https://giecom.com.co/HorarioGenetico';
+  /// Producción  → https://giecom.com.co/HorarioGenetico
+  static const String baseUrl = 'http://10.0.2.2:8000';
 }
 
 // ── Paleta por grupo (A, B, C…) ──────────────────────────────────────────────

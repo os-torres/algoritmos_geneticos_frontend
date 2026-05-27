@@ -700,14 +700,19 @@ class _ProgressCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isRunning = opt.status == OptStatus.running;
 
+    // Progreso disponible durante el polling
+    final tieneProgreso = isRunning && opt.generacionActual > 0;
+    final progresoFrac = (opt.numGeneracionesTotal > 0)
+        ? (opt.generacionActual / opt.numGeneracionesTotal).clamp(0.0, 1.0)
+        : null; // null → barra indeterminada
+
     return Card(
       color: cs.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           // ── Stats ─────────────────────────────────────────────────────────
-          if (isRunning)
-            // Mientras espera la respuesta: muestra tiempo transcurrido
+          if (isRunning) ...[
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               const SizedBox(
                 width: 18, height: 18,
@@ -721,8 +726,29 @@ class _ProgressCard extends StatelessWidget {
                   color: cs.onPrimaryContainer,
                 ),
               ),
-            ])
-          else
+            ]),
+            // Mostrar stats en tiempo real cuando el polling ya devolvió datos
+            if (tieneProgreso) ...[
+              const SizedBox(height: 10),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                _StatPill(
+                  label: 'Generación',
+                  value: opt.numGeneracionesTotal > 0
+                      ? '${opt.generacionActual}/${opt.numGeneracionesTotal}'
+                      : '${opt.generacionActual}',
+                ),
+                _StatPill(
+                  label: 'Fitness',
+                  value: opt.mejorFitness.toStringAsFixed(0),
+                ),
+                _StatPill(
+                  label: 'Conflictos',
+                  value: '${opt.conflictos}',
+                  valueColor: opt.conflictos == 0 ? Colors.green : cs.error,
+                ),
+              ]),
+            ],
+          ] else
             Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
               _StatPill(label: 'Generaciones',
                   value: '${opt.generacionActual}'),
@@ -741,9 +767,11 @@ class _ProgressCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: isRunning
-                // Indeterminada mientras espera la respuesta REST
-                ? const LinearProgressIndicator(minHeight: 8)
-                : LinearProgressIndicator(value: 1.0, minHeight: 8),
+                ? LinearProgressIndicator(
+                    value: progresoFrac, // determinada si hay progreso, null=indeterminada
+                    minHeight: 8,
+                  )
+                : const LinearProgressIndicator(value: 1.0, minHeight: 8),
           ),
 
           if (opt.status == OptStatus.done) ...[

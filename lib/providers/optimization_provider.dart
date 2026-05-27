@@ -6,6 +6,9 @@ import '../services/api_service.dart';
 // ignore: unused_import — ConflictoDetalle se usa en conflictosDetalle
 export '../models/resultado_generacion.dart' show ConflictoDetalle;
 
+/// Intervalo entre consultas de estado al servidor (polling).
+const _kPollInterval = Duration(seconds: 3);
+
 enum OptStatus { idle, running, done, error }
 
 class OptimizationProvider extends ChangeNotifier {
@@ -64,10 +67,11 @@ class OptimizationProvider extends ChangeNotifier {
   List<Asignacion>       horarioFinal      = [];
   List<IndividuoTop>     topIndividuos     = [];
   List<ConflictoDetalle> conflictosDetalle = [];
-  double  mejorFitness     = 0;
-  int     conflictos       = 0;
-  int     generacionActual = 0;
-  String  razonParada      = "";
+  double  mejorFitness          = 0;
+  int     conflictos            = 0;
+  int     generacionActual      = 0;
+  int     numGeneracionesTotal  = 0;  // de la respuesta del servidor
+  String  razonParada           = '';
 
   // Tiempo transcurrido (para mostrar en la UI mientras espera)
   int    _elapsedSec = 0;
@@ -93,9 +97,12 @@ class OptimizationProvider extends ChangeNotifier {
     _runREST(++_runId);
   }
 
+  // ── Flujo asíncrono: POST /api/optimizar → job_id → polling ──────────────
+
   Future<void> _runREST(int myRunId) async {
     try {
-      final result = await ApiService().optimizar({
+      // 1. Iniciar el job; el servidor responde en <1 s con {job_id, estado}
+      final jobResp = await ApiService().iniciarOptimizacion({
         'tam_poblacion':    _tamPoblacion,
         'num_generaciones': _numGeneraciones,
         'prob_cruzamiento': _probCruz,
@@ -107,35 +114,19 @@ class OptimizationProvider extends ChangeNotifier {
           'semestres_filtro': _semestresFiltro,
       });
 
-      if (myRunId != _runId) return; // fue cancelado
+      if (myRunId != _runId) return;
 
-      // ── Historial de generaciones (para la gráfica) ──
-      final rawHistorial = result['historial'] as List? ?? [];
-      historial.addAll(rawHistorial.map(
-        (e) => ResultadoGeneracion.fromHistorialItem(e as Map<String, dynamic>),
-      ));
+      final jobId = jobResp['job_id'] as String?;
+      if (jobId == null || jobId.isEmpty) {
+        throw const ApiException('El servidor no devolvió un job_id válido.');
+      }
+      // 2. Polling hasta completado o error
+      await _pollEstado(myRunId, jobId);
 
-      // ── Resultado final ──────────────────────────────
-      generacionActual = result['generaciones_ejecutadas'] as int? ?? 0;
-      mejorFitness     = (result['mejor_fitness'] as num? ?? 0).toDouble();
-      conflictos       = result['conflictos_finales'] as int? ?? 0;
-      razonParada      = result['razon_parada'] as String? ?? '';
-
-      final rawHorario = result['mejor_horario'] as List? ?? [];
-      horarioFinal = rawHorario
-          .map((e) => Asignacion.fromJson(e as Map<String, dynamic>))
-          .toList();
-
-      final rawConflictos = result['conflictos_detalle'] as List? ?? [];
-      conflictosDetalle = rawConflictos
-          .map((e) => ConflictoDetalle.fromJson(e as Map<String, dynamic>))
-          .toList();
-
-      status = OptStatus.done;
     } on TimeoutException {
       if (myRunId != _runId) return;
-      errorMsg = 'La optimización tardó demasiado. '
-          'Reduce las generaciones o el tamaño de población e intenta de nuevo.';
+      errorMsg = 'Tiempo de espera agotado al iniciar la optimización. '
+          'Verifica la conexión con el servidor.';
       status = OptStatus.error;
     } catch (e) {
       if (myRunId != _runId) return;
@@ -145,10 +136,93 @@ class OptimizationProvider extends ChangeNotifier {
       if (myRunId == _runId) {
         _timer?.cancel();
         _timer = null;
+        notifyListeners();
       }
     }
+  }
 
-    if (myRunId == _runId) notifyListeners();
+  /// Consulta el estado del job cada [_kPollInterval] hasta completado/error.
+  Future<void> _pollEstado(int myRunId, String jobId) async {
+    while (myRunId == _runId) {
+      await Future.delayed(_kPollInterval);
+      if (myRunId != _runId) return;
+
+      try {
+        final estado = await ApiService().estadoOptimizacion(jobId);
+        if (myRunId != _runId) return;
+
+        // Actualizar progreso en tiempo real (visible en la UI)
+        final genAct = estado['generacion_actual'] as int? ?? 0;
+        final fitAct = (estado['fitness_actual'] as num? ?? 0).toDouble();
+        final confAct = estado['conflictos_actual'] as int? ?? 0;
+        final numGen  = estado['num_generaciones'] as int? ?? _numGeneraciones;
+
+        if (genAct > 0 || fitAct > 0) {
+          generacionActual     = genAct;
+          mejorFitness         = fitAct;
+          conflictos           = confAct;
+          numGeneracionesTotal = numGen;
+          notifyListeners();
+        }
+
+        final estadoStr = estado['estado'] as String? ?? '';
+
+        if (estadoStr == 'completado') {
+          final result = estado['resultado'] as Map<String, dynamic>?;
+          if (result == null) {
+            errorMsg = 'El servidor indicó éxito pero el resultado está vacío.';
+            status = OptStatus.error;
+          } else {
+            _procesarResultado(result);
+            status = OptStatus.done;
+          }
+          return;
+
+        } else if (estadoStr == 'error') {
+          errorMsg = estado['error'] as String? ?? 'Error en el servidor.';
+          status = OptStatus.error;
+          return;
+        }
+        // 'en_progreso' → continuar polling
+
+      } on ApiException catch (e) {
+        if (myRunId != _runId) return;
+        errorMsg = e.message;
+        status = OptStatus.error;
+        return;
+      } catch (_) {
+        // Error de red transitorio — seguir intentando
+        if (myRunId != _runId) return;
+      }
+    }
+  }
+
+  /// Parsea el objeto `resultado` del endpoint de estado y rellena los campos del provider.
+  void _procesarResultado(Map<String, dynamic> result) {
+    final rawHistorial = result['historial'] as List? ?? [];
+    historial.addAll(rawHistorial.map(
+      (e) => ResultadoGeneracion.fromHistorialItem(e as Map<String, dynamic>),
+    ));
+
+    generacionActual     = result['generaciones_ejecutadas'] as int? ?? generacionActual;
+    mejorFitness         = (result['mejor_fitness'] as num? ?? mejorFitness).toDouble();
+    conflictos           = result['conflictos_finales'] as int? ?? conflictos;
+    razonParada          = result['razon_parada'] as String? ?? '';
+
+    final rawHorario = result['mejor_horario'] as List? ?? [];
+    horarioFinal = rawHorario
+        .map((e) => Asignacion.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final rawConflictos = result['conflictos_detalle'] as List? ?? [];
+    conflictosDetalle = rawConflictos
+        .map((e) => ConflictoDetalle.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final rawTop = result['top_individuos'] as List? ?? [];
+    topIndividuos = rawTop
+        .map((e) => IndividuoTop.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   void detener() {
@@ -176,12 +250,13 @@ class OptimizationProvider extends ChangeNotifier {
     horarioFinal.clear();
     topIndividuos.clear();
     conflictosDetalle.clear();
-    mejorFitness     = 0;
-    conflictos       = 0;
-    generacionActual = 0;
-    razonParada      = '';
-    errorMsg         = null;
-    _elapsedSec      = 0;
+    mejorFitness         = 0;
+    conflictos           = 0;
+    generacionActual     = 0;
+    numGeneracionesTotal = 0;
+    razonParada          = '';
+    errorMsg             = null;
+    _elapsedSec          = 0;
   }
 
   @override

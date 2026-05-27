@@ -124,8 +124,21 @@ class ApiService {
       _post('/api/importar', body);
 
   // -----------------------------------------------------------------------
-  // Optimización
+  // Optimización (patrón job asíncrono)
   // -----------------------------------------------------------------------
+
+  /// Inicia la optimización en segundo plano.
+  /// Retorna inmediatamente con {job_id, estado:"en_progreso"}.
+  Future<Map<String, dynamic>> iniciarOptimizacion(
+          Map<String, dynamic> params) =>
+      _post('/api/optimizar', params,
+          timeout: const Duration(seconds: 30));
+
+  /// Consulta el estado de un job en curso.
+  /// Retorna {estado, generacion_actual, fitness_actual, conflictos_actual,
+  ///          num_generaciones, resultado?, error?}.
+  Future<Map<String, dynamic>> estadoOptimizacion(String jobId) =>
+      _get('/api/optimizar/estado/$jobId');
 
   // -----------------------------------------------------------------------
   // HTTP helpers
@@ -157,10 +170,6 @@ class ApiService {
     _check(res);
     return jsonDecode(res.body);
   }
-
-  /// Ejecuta el algoritmo genético. Timeout de 10 min (puede tardar según parámetros).
-  Future<Map<String, dynamic>> optimizar(Map<String, dynamic> params) =>
-      _post('/api/optimizar', params, timeout: const Duration(minutes: 10));
 
   Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> body) async {
     final res = await http.put(
